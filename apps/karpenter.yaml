@@ -35,7 +35,7 @@ spec:
         - chart: karpenter
           repoURL: public.ecr.aws/karpenter
           # Pinned at chart authoring; bump deliberately via PR on this repo.
-          targetRevision: 1.0.6
+          targetRevision: 1.12.1
           helm:
             releaseName: karpenter
             valuesObject:
