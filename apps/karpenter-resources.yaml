@@ -1,0 +1,48 @@
+# EC2NodeClass + NodePool definitions for Karpenter.
+#
+# Sync wave 1 — depends on the Karpenter chart at sync wave 0 to install the
+# karpenter.k8s.aws and karpenter.sh CRDs.
+#
+# The resources live in this repo as a small local Helm chart at
+# controllers/karpenter/ so per-cluster facts (cluster name, node role name,
+# pool limits) can be substituted from the ArgoCD cluster Secret. See
+# controllers/karpenter/README.md for the chart's values surface.
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: karpenter-resources
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            argocd.argoproj.io/secret-type: cluster
+  template:
+    metadata:
+      name: '{{ .name }}-karpenter-resources'
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+    spec:
+      project: default
+      destination:
+        server: '{{ .server }}'
+        namespace: karpenter
+      source:
+        repoURL: https://github.com/RamiroCuenca/eks-platform-gitops.git
+        targetRevision: main
+        path: controllers/karpenter
+        helm:
+          releaseName: karpenter-resources
+          valuesObject:
+            clusterName: '{{ .values.clusterName }}'
+            nodeRoleName: '{{ .values.karpenterNodeRoleName }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ServerSideApply=true

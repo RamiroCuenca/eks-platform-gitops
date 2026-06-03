@@ -1,0 +1,37 @@
+# Default EC2NodeClass — referenced by every NodePool in this chart.
+#
+# AMI: Bottlerocket via the @latest alias. Combined with the NodePool's
+# expireAfter: 720h, this rolls every node forward to the current Bottlerocket
+# image inside 30 days with no manual intervention. A long-lived production
+# cluster would pin to specific Bottlerocket versions and rotate them
+# deliberately; for this platform the freshness/operational-overhead trade-off
+# favours the alias.
+#
+# Subnet and SG selection: by the karpenter.sh/discovery tag that the infra
+# repo's EKS module applies to every private subnet and to the cluster SG.
+# Tag-based discovery means this manifest is identical across clusters; the
+# cluster name (the tag value) is the only injected variable.
+
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  amiFamily: Bottlerocket
+  amiSelectorTerms:
+    - alias: bottlerocket@latest
+
+  role: {{ required "nodeRoleName is required" .Values.nodeRoleName | quote }}
+
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: {{ required "clusterName is required" .Values.clusterName | quote }}
+
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: {{ .Values.clusterName | quote }}
+
+  # Propagate the discovery tag onto every launched instance and EBS volume —
+  # makes cost allocation and emergency cleanup queries trivial.
+  tags:
+    karpenter.sh/discovery: {{ .Values.clusterName | quote }}

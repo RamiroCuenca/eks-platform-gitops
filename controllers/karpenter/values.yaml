@@ -1,0 +1,20 @@
+# Defaults only — actual values are supplied by the ApplicationSet at
+# apps/karpenter-resources.yaml, sourced from the ArgoCD cluster Secret
+# written by the infrastructure repo's argocd module.
+
+# Cluster name — used as the karpenter.sh/discovery tag for subnet and
+# security-group selectors, and propagated as a tag onto every node launched.
+# Must match local.cluster_name in the infra repo's EKS module.
+clusterName: ""
+
+# IAM role NAME (not ARN) that Karpenter-launched EC2 instances assume.
+# In Karpenter v1+, EC2NodeClass.spec.role is a role name; Karpenter manages
+# the instance profile itself.
+nodeRoleName: ""
+
+# Cluster-wide capacity caps per NodePool. A runaway pod-creation bug stops
+# at single-digit dollars per hour rather than thousands. Overridable per
+# cluster via the cluster Secret if a real load test needs more headroom.
+nodePoolLimits:
+  cpu: 200
+  memory: 200Gi

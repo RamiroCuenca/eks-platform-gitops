@@ -1,0 +1,78 @@
+# Karpenter controller + CRDs.
+#
+# Sync wave 0 — must reach Synced before any NodePool / EC2NodeClass can apply,
+# since the CRDs are installed by this chart. The NodePool / EC2NodeClass
+# resources live in apps/karpenter-resources.yaml at sync wave 1.
+#
+# Per-cluster values (clusterName, controller role ARN, interruption queue
+# name) are read at render time from the ArgoCD cluster Secret created by the
+# infrastructure repo. Nothing account-specific is committed here.
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: karpenter
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            argocd.argoproj.io/secret-type: cluster
+  template:
+    metadata:
+      name: '{{ .name }}-karpenter'
+      annotations:
+        argocd.argoproj.io/sync-wave: "0"
+    spec:
+      project: default
+      destination:
+        server: '{{ .server }}'
+        namespace: karpenter
+      sources:
+        - chart: karpenter
+          repoURL: public.ecr.aws/karpenter
+          # Pinned at chart authoring; bump deliberately via PR on this repo.
+          targetRevision: 1.12.1
+          helm:
+            releaseName: karpenter
+            valuesObject:
+              # ServiceAccount is created by the chart. Its name must match the
+              # one referenced in the IRSA trust policy in the infra repo
+              # (var.karpenter_service_account, default "karpenter").
+              serviceAccount:
+                name: karpenter
+                annotations:
+                  eks.amazonaws.com/role-arn: '{{ .values.karpenterControllerRoleArn }}'
+              settings:
+                clusterName: '{{ .values.clusterName }}'
+                interruptionQueue: '{{ .values.karpenterInterruptionQueue }}'
+              # Two replicas with PDB so a node disruption never leaves the
+              # cluster without a Karpenter scheduler.
+              replicas: 2
+              podDisruptionBudget:
+                name: karpenter
+                maxUnavailable: 1
+              # Keep the controller off Karpenter-launched nodes. The
+              # karpenter.sh/nodepool label is only present on Karpenter nodes,
+              # so this affinity pins the controller to the system MNG without
+              # needing to know the system NG's name.
+              affinity:
+                nodeAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    nodeSelectorTerms:
+                      - matchExpressions:
+                          - key: karpenter.sh/nodepool
+                            operator: DoesNotExist
+              tolerations:
+                - key: CriticalAddonsOnly
+                  operator: Exists
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
