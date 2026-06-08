@@ -21,6 +21,14 @@ spec:
         selector:
           matchLabels:
             argocd.argoproj.io/secret-type: cluster
+        # Pull per-cluster facts off the cluster Secret's annotations
+        # (the infra repo's argocd module writes them there) and re-expose
+        # them under a clean {{ .values.* }} namespace so the template body
+        # below stays readable.
+        values:
+          clusterName: '{{ index .metadata.annotations "platform.io/cluster-name" }}'
+          awsRegion: '{{ index .metadata.annotations "platform.io/aws-region" }}'
+          karpenterNodeRoleName: '{{ index .metadata.annotations "platform.io/karpenter-node-role-name" }}'
   template:
     metadata:
       name: '{{ .name }}-karpenter-resources'

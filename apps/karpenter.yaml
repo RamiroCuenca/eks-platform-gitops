@@ -21,6 +21,16 @@ spec:
         selector:
           matchLabels:
             argocd.argoproj.io/secret-type: cluster
+        # Pull per-cluster facts off the cluster Secret's annotations
+        # (the infra repo's argocd module writes them there) and re-expose
+        # them under a clean {{ .values.* }} namespace so the template body
+        # below stays readable.
+        values:
+          clusterName: '{{ index .metadata.annotations "platform.io/cluster-name" }}'
+          awsRegion: '{{ index .metadata.annotations "platform.io/aws-region" }}'
+          karpenterControllerRoleArn: '{{ index .metadata.annotations "platform.io/karpenter-controller-role-arn" }}'
+          karpenterNodeRoleName: '{{ index .metadata.annotations "platform.io/karpenter-node-role-name" }}'
+          karpenterInterruptionQueue: '{{ index .metadata.annotations "platform.io/karpenter-interruption-queue" }}'
   template:
     metadata:
       name: '{{ .name }}-karpenter'
@@ -67,8 +77,18 @@ spec:
                           - key: karpenter.sh/nodepool
                             operator: DoesNotExist
               tolerations:
+                # CriticalAddonsOnly is a Kubernetes-wide convention used by
+                # control-plane components; harmless on EKS but worth keeping.
                 - key: CriticalAddonsOnly
                   operator: Exists
+                # The system MNG in the infra repo carries this taint
+                # (modules/eks/node_group.tf) so application workloads can't
+                # accidentally schedule on it. Karpenter is a system-tier
+                # component, so it must tolerate the taint to run there.
+                - key: node-tier
+                  operator: Equal
+                  value: system
+                  effect: NoSchedule
       syncPolicy:
         automated:
           prune: true
