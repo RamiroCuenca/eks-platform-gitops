@@ -1,0 +1,9 @@
+# Gitleaks configuration — extends the default ruleset unchanged.
+#
+# Strict-fail posture: the full-history baseline scan was clean (2026-06-11),
+# so there are no suppressions. Any future carve-out lands here as a named
+# allowlist entry with a written justification — never as a workflow-level
+# continue-on-error.
+
+[extend]
+useDefault = true
