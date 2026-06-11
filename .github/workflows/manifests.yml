@@ -1,0 +1,107 @@
+# Manifest validation: raw ArgoCD manifests and rendered helm charts are
+# schema-checked against the Kubernetes versions both clusters actually run.
+#
+# kubeconform validates native resources against the upstream Kubernetes
+# JSON schemas and CRD-backed resources (ArgoCD, Karpenter) against the
+# community CRDs-catalog, both fetched at run time — the same posture as
+# the SAST rule packs: the validator binary is pinned and checksummed,
+# while validation data tracks upstream.
+#
+# Charts carry render stubs in <chart>/ci/values.yaml for values that
+# ArgoCD injects from the cluster Secret at sync time.
+name: manifests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  KUBECONFORM_VERSION: 0.8.0
+  KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+  HELM_VERSION: 4.0.1
+  HELM_SHA256: e0365548f01ed52a58a1181ad310b604a3244f59257425bb1739499372bdff60
+  # Must track cluster_version in the infra repo's {dev,prod}/account.hcl.
+  K8S_VERSIONS: "1.35.0 1.36.0"
+  CRD_SCHEMAS: "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+
+jobs:
+  kubeconform:
+    name: kubeconform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install kubeconform
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/kubeconform.tar.gz" \
+            "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  $RUNNER_TEMP/kubeconform.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/kubeconform.tar.gz" -C "$RUNNER_TEMP/bin" kubeconform
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Validate raw manifests
+        run: |
+          for v in $K8S_VERSIONS; do
+            echo "::group::apps/ @ Kubernetes $v"
+            kubeconform -strict -summary \
+              -kubernetes-version "$v" \
+              -schema-location default \
+              -schema-location "$CRD_SCHEMAS" \
+              apps/
+            echo "::endgroup::"
+          done
+
+  helm:
+    name: helm (lint + rendered schemas)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install helm
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/helm.tar.gz" \
+            "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  $RUNNER_TEMP/helm.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/helm.tar.gz" -C "$RUNNER_TEMP" linux-amd64/helm
+          mv "$RUNNER_TEMP/linux-amd64/helm" "$RUNNER_TEMP/bin/helm"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Install kubeconform
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/kubeconform.tar.gz" \
+            "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  $RUNNER_TEMP/kubeconform.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/kubeconform.tar.gz" -C "$RUNNER_TEMP/bin" kubeconform
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Lint charts and validate rendered output
+        run: |
+          # Without pipefail a failed `helm template` leaves kubeconform
+          # validating zero resources and exiting 0 — render errors must
+          # fail the gate, not empty-pass it.
+          set -o pipefail
+          for chart in controllers/*/; do
+            values=()
+            if [ -f "${chart}ci/values.yaml" ]; then
+              values=(-f "${chart}ci/values.yaml")
+            fi
+            echo "::group::lint ${chart}"
+            helm lint --strict "${values[@]}" "$chart"
+            echo "::endgroup::"
+            for v in $K8S_VERSIONS; do
+              echo "::group::render + validate ${chart} @ Kubernetes $v"
+              helm template "$chart" "${values[@]}" | kubeconform -strict -summary \
+                -kubernetes-version "$v" \
+                -schema-location default \
+                -schema-location "$CRD_SCHEMAS" \
+                -
+              echo "::endgroup::"
+            done
+          done

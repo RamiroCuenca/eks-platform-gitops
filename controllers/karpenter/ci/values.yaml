@@ -1,0 +1,5 @@
+# CI-only render stubs. The real values are supplied by the ApplicationSet at
+# apps/karpenter-resources.yaml from the ArgoCD cluster Secret — these exist
+# solely so `helm template` can render the chart for schema validation.
+clusterName: ci-validation
+nodeRoleName: ci-validation-node-role
