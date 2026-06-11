@@ -35,4 +35,3 @@ spec:
   # makes cost allocation and emergency cleanup queries trivial.
   tags:
     karpenter.sh/discovery: {{ .Values.clusterName | quote }}
-{{ end }}

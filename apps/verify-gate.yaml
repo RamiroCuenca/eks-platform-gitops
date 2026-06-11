@@ -1,7 +1,0 @@
-# Temporary fixture: unknown apiVersion — the kubeconform gate must refuse it.
-apiVersion: argoproj.io/v1alpha2
-kind: ApplicationSet
-metadata:
-  name: verify-gate
-  namespace: argocd
-spec: {}
