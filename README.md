@@ -1,5 +1,8 @@
 # eks-platform-gitops
 
+[![sast](https://github.com/RamiroCuenca/eks-platform-gitops/actions/workflows/sast.yml/badge.svg?branch=main)](https://github.com/RamiroCuenca/eks-platform-gitops/actions/workflows/sast.yml)
+[![secrets-scan](https://github.com/RamiroCuenca/eks-platform-gitops/actions/workflows/secrets-scan.yml/badge.svg?branch=main)](https://github.com/RamiroCuenca/eks-platform-gitops/actions/workflows/secrets-scan.yml)
+
 GitOps configuration repository for the [eks-production-platform](https://github.com/RamiroCuenca/eks-production-platform). Kubernetes manifests, Helm chart references, and ArgoCD `ApplicationSet` definitions — reconciled into the cluster by ArgoCD.
 
 ---

@@ -1,0 +1,13 @@
+# Automated dependency updates for the pinned workflow actions. The
+# gitleaks binary pin and the semgrep image digest are bumped manually,
+# alongside their checksums.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
