@@ -1,5 +1,6 @@
 # eks-platform-gitops
 
+[![manifests](https://github.com/RamiroCuenca/eks-platform-gitops/actions/workflows/manifests.yml/badge.svg?branch=main)](https://github.com/RamiroCuenca/eks-platform-gitops/actions/workflows/manifests.yml)
 [![sast](https://github.com/RamiroCuenca/eks-platform-gitops/actions/workflows/sast.yml/badge.svg?branch=main)](https://github.com/RamiroCuenca/eks-platform-gitops/actions/workflows/sast.yml)
 [![secrets-scan](https://github.com/RamiroCuenca/eks-platform-gitops/actions/workflows/secrets-scan.yml/badge.svg?branch=main)](https://github.com/RamiroCuenca/eks-platform-gitops/actions/workflows/secrets-scan.yml)
 
