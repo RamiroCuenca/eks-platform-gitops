@@ -1,0 +1,37 @@
+# Static analysis over Kubernetes manifests and workflow definitions.
+#
+# Semgrep ships as a Python package, not a static release binary, so the
+# checksum-pinned-binary pattern used for gitleaks doesn't apply. It runs
+# from the official container image pinned by sha256 digest instead — the
+# same immutable-artifact guarantee from a different artifact type.
+#
+# Registry rule packs (p/...) resolve at run time: the scanner is pinned for
+# supply-chain integrity, while detection rules track upstream — the same way
+# gitleaks rules arrive bundled with their version bumps.
+name: sast
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: semgrep
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.165.0@sha256:f4791a54c891eabe1188248135574e6e03dfc31dfd3f3b747c7bec7079bfed1b
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Semgrep scan
+        run: >-
+          semgrep scan
+          --config p/kubernetes
+          --config p/secrets
+          --config p/ci
+          --metrics=off
+          --error
