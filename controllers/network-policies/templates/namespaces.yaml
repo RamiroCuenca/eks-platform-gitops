@@ -1,0 +1,11 @@
+{{- if .Values.createNamespaces }}
+{{- range $ns := .Values.appNamespaces }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    app.kubernetes.io/managed-by: argocd
+{{- end }}
+{{- end }}
