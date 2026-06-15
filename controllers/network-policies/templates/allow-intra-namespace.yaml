@@ -1,0 +1,23 @@
+{{- if .Values.allowIntraNamespace }}
+{{- range $ns := .Values.appNamespaces }}
+---
+# Optional: open pod-to-pod traffic within the same namespace. Off in the
+# strict baseline; enabled per-namespace for apps that want unrestricted
+# east-west traffic among their own pods. fromEndpoints/toEndpoints with an
+# empty selector match all endpoints in this same namespace (a CiliumNetwork-
+# Policy is namespace-scoped, so the match does not cross namespaces).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: {{ $ns }}
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - {}
+  egress:
+    - toEndpoints:
+        - {}
+{{- end }}
+{{- end }}
