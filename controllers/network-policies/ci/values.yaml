@@ -1,8 +1,0 @@
-# CI-only render stub. The real namespace list is set per cluster via the
-# chart's values.yaml; this exists so `helm template` / `helm lint` can render
-# the chart for schema validation independent of runtime values. allowIntra is
-# on here so the optional template renders and gets validated too.
-appNamespaces:
-  - ci-validation
-createNamespaces: true
-allowIntraNamespace: true
