@@ -31,12 +31,18 @@ The split follows the standard rule of thumb: **AWS-credential-requiring resourc
 .
 ├── apps/                 # ArgoCD ApplicationSets, one per controller / workload
 │   ├── karpenter.yaml              # upstream Karpenter chart, per cluster
-│   └── karpenter-resources.yaml    # local NodePool/EC2NodeClass chart, per cluster
-└── controllers/          # local Helm charts referenced by the ApplicationSets above
-    └── karpenter/        # NodePool + EC2NodeClass for Karpenter
+│   ├── karpenter-resources.yaml    # local NodePool/EC2NodeClass chart, per cluster
+│   ├── network-policies.yaml       # local default-deny CiliumNetworkPolicy chart
+│   ├── secrets-store-csi.yaml      # upstream CSI driver + AWS provider (ASCP)
+│   └── secrets-demo.yaml           # local demo workload that mounts a secret
+├── controllers/          # local Helm charts for platform controllers
+│   ├── karpenter/        # NodePool + EC2NodeClass for Karpenter
+│   └── network-policies/ # zero-trust default-deny floor + DNS allow
+└── workloads/            # local Helm charts for sample/demo applications
+    └── secrets-demo/     # IRSA + ASCP secret-mount demonstration
 ```
 
-`apps/` is the only directory the in-cluster ArgoCD root Application points at. Adding a new controller is a single PR that creates `apps/<controller>.yaml` and (if it needs local manifests) a `controllers/<controller>/` chart.
+`apps/` is the only directory the in-cluster ArgoCD root Application points at. Adding a new controller is a single PR that creates `apps/<controller>.yaml` and (if it needs local manifests) a `controllers/<controller>/` chart; sample applications follow the same pattern under `workloads/`.
 
 ## Per-cluster value injection
 

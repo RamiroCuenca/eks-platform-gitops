@@ -91,7 +91,10 @@ jobs:
           # validating zero resources and exiting 0 — render errors must
           # fail the gate, not empty-pass it.
           set -o pipefail
-          for chart in controllers/*/; do
+          # nullglob so an empty controllers/ or workloads/ expands to nothing
+          # rather than to the literal glob (which would fail helm lint).
+          shopt -s nullglob
+          for chart in controllers/*/ workloads/*/; do
             values=()
             if [ -f "${chart}ci/values.yaml" ]; then
               values=(-f "${chart}ci/values.yaml")
