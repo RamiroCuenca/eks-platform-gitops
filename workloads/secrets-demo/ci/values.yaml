@@ -1,0 +1,6 @@
+# CI-only render stubs. The real values are supplied by the ApplicationSet at
+# apps/secrets-demo.yaml from the ArgoCD cluster Secret — these exist solely so
+# `helm template` can render the chart for kubeconform schema validation.
+demoAppSecretsRoleArn: "arn:aws:iam::000000000000:role/ci-validation-demo-app-secrets"
+demoSecretName: "eks-platform/dev/demo-app/credentials"
+awsRegion: "ap-northeast-1"

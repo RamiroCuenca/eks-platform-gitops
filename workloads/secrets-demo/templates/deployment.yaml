@@ -1,0 +1,43 @@
+# Demo workload. Has no toleration for the system node group's
+# node-tier=system taint, so it stays Pending until Karpenter provisions an
+# application node — deploying it is also the Karpenter scale-up demonstration
+# (the new node comes up through Cilium's agent-not-ready startup taint).
+#
+# The CSI volume mount triggers the driver -> AWS provider handoff on the node;
+# the pod makes no AWS network call itself, which is why it works under the
+# demo namespace's default-deny egress policy.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: demo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-app
+  template:
+    metadata:
+      labels:
+        app: demo-app
+    spec:
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      containers:
+        - name: app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["sleep", "infinity"]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: secrets-store
+              mountPath: {{ .Values.mountPath }}
+              readOnly: true
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: demo-app-secrets

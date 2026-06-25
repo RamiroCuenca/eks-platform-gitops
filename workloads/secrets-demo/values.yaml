@@ -1,0 +1,36 @@
+# Per-cluster values are injected at sync time by apps/secrets-demo.yaml from
+# the ArgoCD cluster Secret. Defaults here are empty / safe placeholders.
+
+# IRSA role ARN annotated onto the ServiceAccount. Terraform-created and
+# account-specific, so it is supplied via the cluster Secret and never
+# committed to this public repo.
+demoAppSecretsRoleArn: ""
+
+# Secrets Manager secret name the SecretProviderClass fetches (objectName).
+demoSecretName: ""
+
+# Region the AWS provider targets for the GetSecretValue call.
+awsRegion: ""
+
+# The demo namespace is created and governed (default-deny + allow-dns) by the
+# network-policies chart; this workload only adds resources into it.
+namespace: demo
+
+serviceAccountName: demo-app
+
+# Minimal long-lived container. ECR Public mirror of the Docker Hub official
+# image to avoid Docker Hub pull-rate limits. The container does nothing but
+# sleep; the secret is verified with `kubectl exec ... cat <mountPath>`.
+image:
+  repository: public.ecr.aws/docker/library/busybox
+  tag: "1.37"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+mountPath: /mnt/secrets-store
