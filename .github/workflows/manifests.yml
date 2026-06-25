@@ -24,8 +24,12 @@ env:
   KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
   HELM_VERSION: 4.0.1
   HELM_SHA256: e0365548f01ed52a58a1181ad310b604a3244f59257425bb1739499372bdff60
-  # Must track cluster_version in the infra repo's {dev,prod}/account.hcl.
-  K8S_VERSIONS: "1.35.0 1.36.0"
+  # Must track cluster_version in the infra repo's {dev,prod}/account.hcl. Both
+  # environments run 1.36, so the matrix is a single version. The templated
+  # CRD_SCHEMAS URL resolves any group dynamically — Cilium's cilium.io schemas
+  # are served by the same community catalog as the ArgoCD/Karpenter ones, so no
+  # extra location is needed for the new CiliumNetworkPolicy manifests.
+  K8S_VERSIONS: "1.36.0"
   CRD_SCHEMAS: "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
 
 jobs:

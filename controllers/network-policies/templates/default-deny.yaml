@@ -1,0 +1,18 @@
+{{- range $ns := .Values.appNamespaces }}
+---
+# Zero-trust floor: select every pod (empty endpointSelector) and declare an
+# ingress and egress section with NO rules. An empty rules array ([]) puts the
+# selected endpoints into default-deny for that direction with zero allowed
+# peers — distinct from `- {}` (a single empty rule), which matches everything
+# and would allow all. Sibling allow policies (DNS here; app-specific flows in
+# later phases) are additive on top of this floor.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: default-deny
+  namespace: {{ $ns }}
+spec:
+  endpointSelector: {}
+  ingress: []
+  egress: []
+{{- end }}
