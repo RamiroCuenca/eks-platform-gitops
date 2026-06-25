@@ -37,6 +37,13 @@ spec:
         group: karpenter.k8s.aws
         kind: EC2NodeClass
         name: default
+      # Cilium is the CNI: a freshly launched node is NotReady until the Cilium
+      # agent programs its datapath. This startup taint blocks pod scheduling
+      # until the agent removes it, closing the race where a pod lands on a node
+      # whose networking isn't up yet. See infra journal "Karpenter ↔ Cilium".
+      startupTaints:
+        - key: node.cilium.io/agent-not-ready
+          effect: NoExecute
       requirements:
         - key: kubernetes.io/arch
           operator: In
