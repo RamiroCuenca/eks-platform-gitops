@@ -4,7 +4,7 @@
 [![sast](https://github.com/RamiroCuenca/eks-platform-gitops/actions/workflows/sast.yml/badge.svg?branch=main)](https://github.com/RamiroCuenca/eks-platform-gitops/actions/workflows/sast.yml)
 [![secrets-scan](https://github.com/RamiroCuenca/eks-platform-gitops/actions/workflows/secrets-scan.yml/badge.svg?branch=main)](https://github.com/RamiroCuenca/eks-platform-gitops/actions/workflows/secrets-scan.yml)
 
-GitOps configuration repository for the [eks-production-platform](https://github.com/RamiroCuenca/eks-production-platform). Kubernetes manifests, Helm chart references, and ArgoCD `ApplicationSet` definitions — reconciled into the cluster by ArgoCD.
+GitOps configuration repository for the [eks-production-platform](https://github.com/RamiroCuenca/eks-production-platform). Kubernetes manifests, Helm chart references, and ArgoCD `ApplicationSet` definitions, reconciled into the cluster by ArgoCD.
 
 ---
 
@@ -23,7 +23,7 @@ Two repositories cooperate to deliver the platform:
 | Observability stack (kube-prometheus-stack, Loki) | this repo |
 | Demo workloads | this repo |
 
-The split follows the standard rule of thumb: **AWS-credential-requiring resources go in the infrastructure repo; in-cluster declarative state lives here.** ArgoCD itself is the one bootstrap exception — the infrastructure repo installs it once and then steps out of the cluster.
+The split follows the standard rule of thumb: **AWS-credential-requiring resources go in the infrastructure repo; in-cluster declarative state lives here.** ArgoCD itself is the one bootstrap exception: the infrastructure repo installs it once and then steps out of the cluster.
 
 ## Repository layout
 
@@ -83,7 +83,7 @@ spec:
 The pattern delivers three properties:
 
 1. **No account-identifying values in Git.** ARNs and account IDs never enter the public repository.
-2. **Multi-cluster by construction.** Adding a second cluster needs no change in this repo — the infrastructure registers a new cluster `Secret` and every `ApplicationSet` emits a new `Application` automatically.
+2. **Multi-cluster by construction.** Adding a second cluster needs no change in this repo; the infrastructure registers a new cluster `Secret` and every `ApplicationSet` emits a new `Application` automatically.
 3. **Reusable for every controller that needs IRSA.** Cilium, AWS LB Controller, External DNS, External Secrets, and the observability stack all consume the same `Secret`.
 
 ## Karpenter delivery
@@ -97,16 +97,16 @@ Karpenter ships as two cooperating `ApplicationSet`s with explicit sync ordering
 
 The split prevents the well-known race where `NodePool` resources are applied before the chart has installed the `NodePool` CRD. Each `ApplicationSet` also has its own prune / rollback envelope, so pausing or reverting resource definitions never destabilises the controller.
 
-`NodePool` defaults — arm64-first Bottlerocket on Graviton, spot-first with on-demand fallback, aggressive consolidation, 30-day node expiry — are documented in `controllers/karpenter/README.md`.
+`NodePool` defaults (arm64-first Bottlerocket on Graviton, spot-first with on-demand fallback, aggressive consolidation, 30-day node expiry) are documented in `controllers/karpenter/README.md`.
 
 ## Adding a new controller
 
 1. If the controller needs an IRSA role or any AWS resource, **add it in the infrastructure repo first**. Export the role ARN (and anything else cluster-specific) as a Terraform output. Extend the cluster `Secret` schema to carry the new value.
-2. In this repo, create `apps/<controller>.yaml` — an `ApplicationSet` using the cluster generator, referencing the upstream chart and reading any cluster-specific value from `{{ .values.* }}`.
+2. In this repo, create `apps/<controller>.yaml`, an `ApplicationSet` using the cluster generator, referencing the upstream chart and reading any cluster-specific value from `{{ .values.* }}`.
 3. If the controller needs local CRDs or values templated with cluster-specific data, add `controllers/<controller>/` as a small local Helm chart.
 4. Open a PR. ArgoCD picks up the new `ApplicationSet` on its next sync and renders the `Application`(s) into every registered cluster.
 
-Chart-version bumps, NodePool tuning, and controller value tweaks need no infrastructure change — they flow through this repo and reconcile within the ArgoCD sync interval.
+Chart-version bumps, NodePool tuning, and controller value tweaks need no infrastructure change; they flow through this repo and reconcile within the ArgoCD sync interval.
 
 ## Status
 
