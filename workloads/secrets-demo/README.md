@@ -22,11 +22,11 @@ The workload pod makes **no network call to AWS**. The kubelet → CSI driver �
 AWS provider handoff is a node-local socket; the **AWS provider DaemonSet** (in
 `kube-system`, outside the default-deny scope) performs the IRSA-scoped
 `GetSecretValue` and hands the pod a file. So this pod runs under strict
-default-deny egress (DNS only) and still receives its secret — no Secrets
+default-deny egress (DNS only) and still receives its secret; no Secrets
 Manager allow-rule is needed in the app namespace.
 
 The value is mounted on **tmpfs** (memory) for the pod's lifetime and is never
-written to a Kubernetes Secret in etcd — `syncSecret` is intentionally off.
+written to a Kubernetes Secret in etcd; `syncSecret` is intentionally off.
 
 ## Values
 
@@ -48,6 +48,6 @@ through the cluster Secret the infra repo's `argocd` module writes.
 # which is also the Karpenter scale-up demo.
 kubectl -n demo get pods -l app=demo-app
 
-# Read the mounted secret — exec is node-local, so it works under default-deny.
+# Read the mounted secret (exec is node-local, so it works under default-deny).
 kubectl -n demo exec deploy/demo-app -- cat /mnt/secrets-store/eks-platform/<env>/demo-app/credentials
 ```
