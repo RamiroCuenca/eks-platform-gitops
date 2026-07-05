@@ -1,0 +1,82 @@
+# One-shot provisioning of the least-privilege application DB user, running as
+# the db-init identity — the only principal able to read the master secret.
+#
+# ArgoCD mechanics: a completed Job is immutable, so a plain resource would go
+# permanently OutOfSync on the next apply. The Sync-hook + BeforeHookCreation
+# combination deletes and re-runs it on every sync instead; the SQL is
+# idempotent so re-runs are harmless. Waves order the app internally:
+# identities/mounts/policies (wave 0) -> this Job (wave 1) -> workloads
+# (wave 2), so the first sync cannot race the user's existence and a failed
+# init fails the sync visibly.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: go-demo-db-init
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: go-demo
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: go-demo-db-init
+        app.kubernetes.io/part-of: go-demo
+    spec:
+      serviceAccountName: {{ .Values.serviceAccounts.dbInit }}
+      restartPolicy: Never
+      containers:
+        - name: db-init
+          image: {{ .Values.dbInit.image | quote }}
+          env:
+            - name: DB_HOST
+              value: {{ .Values.auroraHost | quote }}
+            - name: DB_PORT
+              value: {{ .Values.auroraPort | quote }}
+            - name: DB_NAME
+              value: {{ .Values.auroraDatabase | quote }}
+            # rds.force_ssl=1 rejects anything non-TLS; be explicit anyway.
+            - name: PGSSLMODE
+              value: require
+          command:
+            - /bin/sh
+            - -c
+            # The generated password's character set excludes quotes and
+            # backslashes (see the infra repo's secrets module), so inlining
+            # it in a single-quoted SQL literal is safe. The app user gets
+            # CONNECT and nothing else: the service performs no relational
+            # reads or writes (`select version()` needs only a connection),
+            # and the absence of table grants is deliberate least privilege.
+            - |
+              set -eu
+              MASTER_USER="$(cat /mnt/secrets-store/master-username)"
+              export PGPASSWORD="$(cat /mnt/secrets-store/master-password)"
+              APP_USER="$(cat /mnt/secrets-store/app-username)"
+              APP_PASSWORD="$(cat /mnt/secrets-store/app-password)"
+
+              run() { psql -v ON_ERROR_STOP=1 -h "$DB_HOST" -p "$DB_PORT" -d "$DB_NAME" -U "$MASTER_USER" "$@"; }
+
+              if run -tAc "select 1 from pg_roles where rolname = '$APP_USER'" | grep -q 1; then
+                echo "role $APP_USER exists; resetting password"
+                run -c "ALTER ROLE \"$APP_USER\" WITH LOGIN PASSWORD '$APP_PASSWORD'"
+              else
+                echo "creating role $APP_USER"
+                run -c "CREATE ROLE \"$APP_USER\" WITH LOGIN PASSWORD '$APP_PASSWORD'"
+              fi
+              run -c "GRANT CONNECT ON DATABASE \"$DB_NAME\" TO \"$APP_USER\""
+              echo "db-init complete"
+          volumeMounts:
+            - name: secrets-store
+              mountPath: {{ .Values.mountPath }}
+              readOnly: true
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: go-demo-db-init

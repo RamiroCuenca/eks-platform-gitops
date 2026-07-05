@@ -1,0 +1,59 @@
+# Queue worker: same image, APP_MODE=worker — drains the Redis list the
+# server's /enqueue fills. Fixed at one replica for now; Phase 11 hands its
+# scale to KEDA's Redis-list scaler. Needs only the Redis half of the config;
+# it still mounts the runtime SecretProviderClass (the AUTH token lives
+# there), which the shared runtime IRSA role covers.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-demo-worker
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: go-demo-worker
+    app.kubernetes.io/part-of: go-demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels:
+      app: go-demo-worker
+  template:
+    metadata:
+      labels:
+        app: go-demo-worker
+        app.kubernetes.io/part-of: go-demo
+    spec:
+      serviceAccountName: {{ .Values.serviceAccounts.app }}
+      containers:
+        - name: worker
+          image: "{{ .Values.imageRepository }}:{{ .Values.image.tag }}"
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_MODE
+              value: worker
+            - name: REDIS_ADDR
+              value: "{{ .Values.redisHost }}:{{ .Values.redisPort }}"
+            - name: REDIS_TLS
+              value: "true"
+            - name: REDIS_PASSWORD_FILE
+              value: {{ .Values.mountPath }}/redis-auth-token
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+          volumeMounts:
+            - name: secrets-store
+              mountPath: {{ .Values.mountPath }}
+              readOnly: true
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: go-demo-runtime

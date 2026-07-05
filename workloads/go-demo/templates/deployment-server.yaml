@@ -1,0 +1,84 @@
+# HTTP server: /db exercises Aurora over enforced TLS, /cache and /enqueue
+# exercise Redis (TLS + AUTH), /metrics feeds Prometheus. No toleration for
+# the system node group's taint, so it lands on Karpenter-provisioned
+# application nodes.
+#
+# spec.replicas is deliberately absent when the HPA is enabled: with selfHeal
+# on, a committed replica count would make ArgoCD revert every HPA scale-up
+# as "drift". The HPA is the sole owner of scale.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-demo-server
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: go-demo-server
+    app.kubernetes.io/part-of: go-demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  {{- if not .Values.hpa.enabled }}
+  replicas: 1
+  {{- end }}
+  selector:
+    matchLabels:
+      app: go-demo-server
+  template:
+    metadata:
+      labels:
+        app: go-demo-server
+        app.kubernetes.io/part-of: go-demo
+    spec:
+      serviceAccountName: {{ .Values.serviceAccounts.app }}
+      containers:
+        - name: server
+          image: "{{ .Values.imageRepository }}:{{ .Values.image.tag }}"
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_MODE
+              value: server
+            # Non-secret connection facts, bridged from the cluster Secret's
+            # annotations. Secret values arrive only as files below.
+            - name: DB_HOST
+              value: {{ .Values.auroraHost | quote }}
+            - name: DB_PORT
+              value: {{ .Values.auroraPort | quote }}
+            - name: DB_NAME
+              value: {{ .Values.auroraDatabase | quote }}
+            - name: DB_USER
+              value: {{ .Values.dbUser | quote }}
+            - name: DB_SSLMODE
+              value: require
+            - name: DB_PASSWORD_FILE
+              value: {{ .Values.mountPath }}/db-password
+            - name: REDIS_ADDR
+              value: "{{ .Values.redisHost }}:{{ .Values.redisPort }}"
+            - name: REDIS_TLS
+              value: "true"
+            - name: REDIS_PASSWORD_FILE
+              value: {{ .Values.mountPath }}/redis-auth-token
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            # 503 until both Aurora and Redis answer — a pod never receives
+            # traffic it cannot serve.
+            httpGet:
+              path: /readyz
+              port: http
+          resources:
+            {{- toYaml .Values.server.resources | nindent 12 }}
+          volumeMounts:
+            - name: secrets-store
+              mountPath: {{ .Values.mountPath }}
+              readOnly: true
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: go-demo-runtime

@@ -1,0 +1,16 @@
+# CI-only render stubs. The real values are supplied by the ApplicationSet at
+# apps/go-demo.yaml from the ArgoCD cluster Secret — these exist solely so
+# `helm template` can render the chart for kubeconform schema validation.
+goDemoRoleArn: "arn:aws:iam::000000000000:role/ci-validation-go-demo"
+dbInitRoleArn: "arn:aws:iam::000000000000:role/ci-validation-go-demo-db-init"
+dbSecretName: "eks-platform/dev/go-demo/db-credentials"
+auroraMasterSecretArn: "arn:aws:secretsmanager:ap-northeast-1:000000000000:secret:rds!cluster-ci-validation"
+redisSecretName: "eks-platform/dev/redis/connection"
+dbUser: "app_user"
+auroraHost: "ci-validation.cluster-000.ap-northeast-1.rds.amazonaws.com"
+auroraPort: "5432"
+auroraDatabase: "appdb"
+redisHost: "master.ci-validation.000.apne1.cache.amazonaws.com"
+redisPort: "6379"
+imageRepository: "000000000000.dkr.ecr.ap-northeast-1.amazonaws.com/eks-platform/demo-app"
+awsRegion: "ap-northeast-1"
