@@ -7,6 +7,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Wait out the window where a freshly published release is most likely to
+    # be malicious or broken before proposing it (supply-chain hygiene; also
+    # gives upstream time to yank bad releases).
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns:
