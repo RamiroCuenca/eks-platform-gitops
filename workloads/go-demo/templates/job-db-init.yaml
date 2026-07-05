@@ -32,6 +32,17 @@ spec:
       containers:
         - name: db-init
           image: {{ .Values.dbInit.image | quote }}
+          securityContext:
+            # The postgres:alpine image defaults to root; run as its bundled
+            # postgres user (uid/gid 70) instead. Non-interactive psql writes
+            # nothing to disk, so the root filesystem can be read-only.
+            runAsNonRoot: true
+            runAsUser: 70
+            runAsGroup: 70
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
           env:
             - name: DB_HOST
               value: {{ .Values.auroraHost | quote }}

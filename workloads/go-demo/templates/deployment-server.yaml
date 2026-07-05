@@ -33,6 +33,14 @@ spec:
       containers:
         - name: server
           image: "{{ .Values.imageRepository }}:{{ .Values.image.tag }}"
+          securityContext:
+            # The image is distroless nonroot (uid 65532) and the binary is
+            # static with no filesystem writes — lock both properties in.
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
           ports:
             - name: http
               containerPort: 8080

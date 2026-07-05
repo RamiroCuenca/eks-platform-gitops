@@ -28,6 +28,13 @@ spec:
       containers:
         - name: worker
           image: "{{ .Values.imageRepository }}:{{ .Values.image.tag }}"
+          securityContext:
+            # Same posture as the server: distroless nonroot, no writes.
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
           ports:
             - name: http
               containerPort: 8080
