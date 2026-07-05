@@ -1,0 +1,77 @@
+# The Go demo application: HTTP server + queue worker, deployed into the
+# default-deny `demo` namespace. Sync wave 2 — after the CSI driver/provider
+# (wave 0) and the namespace + zero-trust floor (network-policies, wave 1).
+#
+# Everything account-specific or apply-generated (IRSA role ARNs, secret
+# names, the image repository URL, data-tier endpoints) is read from the
+# ArgoCD cluster Secret's annotations. The split is by secrecy of the value:
+# these are non-secret facts that become plain pod env, while secret material
+# (DB password, Redis AUTH token) reaches the pods only as CSI-mounted tmpfs
+# files. Only the image TAG is committed here — the app pipeline promotes it
+# via auto-merged pull requests.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: go-demo
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            argocd.argoproj.io/secret-type: cluster
+        values:
+          goDemoRoleArn: '{{ index .metadata.annotations "platform.io/go-demo-secrets-role-arn" }}'
+          dbInitRoleArn: '{{ index .metadata.annotations "platform.io/go-demo-db-init-role-arn" }}'
+          dbSecretName: '{{ index .metadata.annotations "platform.io/go-demo-db-secret-name" }}'
+          dbUser: '{{ index .metadata.annotations "platform.io/go-demo-db-user" }}'
+          imageRepository: '{{ index .metadata.annotations "platform.io/go-demo-image-repository" }}'
+          auroraMasterSecretArn: '{{ index .metadata.annotations "platform.io/aurora-master-secret-arn" }}'
+          auroraHost: '{{ index .metadata.annotations "platform.io/aurora-writer-endpoint" }}'
+          auroraPort: '{{ index .metadata.annotations "platform.io/aurora-port" }}'
+          auroraDatabase: '{{ index .metadata.annotations "platform.io/aurora-database" }}'
+          redisHost: '{{ index .metadata.annotations "platform.io/redis-primary-endpoint" }}'
+          redisPort: '{{ index .metadata.annotations "platform.io/redis-port" }}'
+          redisSecretName: '{{ index .metadata.annotations "platform.io/redis-connection-secret-name" }}'
+          awsRegion: '{{ index .metadata.annotations "platform.io/aws-region" }}'
+  template:
+    metadata:
+      name: '{{ .name }}-go-demo'
+      annotations:
+        argocd.argoproj.io/sync-wave: "2"
+    spec:
+      project: default
+      destination:
+        server: '{{ .server }}'
+        namespace: demo
+      source:
+        repoURL: https://github.com/RamiroCuenca/eks-platform-gitops.git
+        targetRevision: main
+        path: workloads/go-demo
+        helm:
+          releaseName: go-demo
+          valuesObject:
+            goDemoRoleArn: '{{ .values.goDemoRoleArn }}'
+            dbInitRoleArn: '{{ .values.dbInitRoleArn }}'
+            dbSecretName: '{{ .values.dbSecretName }}'
+            dbUser: '{{ .values.dbUser }}'
+            imageRepository: '{{ .values.imageRepository }}'
+            auroraMasterSecretArn: '{{ .values.auroraMasterSecretArn }}'
+            auroraHost: '{{ .values.auroraHost }}'
+            auroraPort: '{{ .values.auroraPort }}'
+            auroraDatabase: '{{ .values.auroraDatabase }}'
+            redisHost: '{{ .values.redisHost }}'
+            redisPort: '{{ .values.redisPort }}'
+            redisSecretName: '{{ .values.redisSecretName }}'
+            awsRegion: '{{ .values.awsRegion }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          # Safety net only — the demo namespace is created and governed by
+          # the network-policies chart at wave 1.
+          - CreateNamespace=true
+          - ServerSideApply=true

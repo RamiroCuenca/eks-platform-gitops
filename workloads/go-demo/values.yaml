@@ -1,0 +1,80 @@
+# Per-cluster values are injected at sync time by apps/go-demo.yaml from the
+# ArgoCD cluster Secret's annotations. Defaults here are empty placeholders —
+# nothing account-specific or apply-generated is committed.
+
+# IRSA role ARNs. Two identities, split by privilege: the runtime role reads
+# only the app-user credential and the Redis connection secret; the db-init
+# role is the only identity able to read the RDS master secret.
+goDemoRoleArn: ""
+dbInitRoleArn: ""
+
+# Secrets Manager names/ARNs the SecretProviderClasses fetch.
+dbSecretName: ""
+auroraMasterSecretArn: ""
+redisSecretName: ""
+
+# Least-privilege DB username (also present inside the credential secret —
+# bridged from Terraform so the two can never drift).
+dbUser: ""
+
+# Data-tier connection facts. Non-secret, apply-generated, Terraform-owned.
+auroraHost: ""
+auroraPort: ""
+auroraDatabase: ""
+redisHost: ""
+redisPort: ""
+
+# ECR repository URL (embeds the account ID, hence bridged).
+imageRepository: ""
+
+awsRegion: ""
+
+# ---------------------------------------------------------------------------
+# Committed configuration.
+
+# The demo namespace is created and governed (default-deny + allow-dns) by the
+# network-policies chart; this workload only adds resources into it.
+namespace: demo
+
+image:
+  # The ONLY deployment-defining value committed to Git: the immutable image
+  # tag (a full commit SHA in the app repo). Updated exclusively by the app
+  # pipeline's promotion pull requests after a successful publish.
+  tag: "78afcd5940e9cb25c543af5650408521c9181e73"
+
+serviceAccounts:
+  app: go-demo
+  dbInit: go-demo-db-init
+
+server:
+  # No replicas here — the HPA owns the count (see hpa below). Requests set,
+  # no CPU limit: HPA utilization is computed against requests, and a CPU
+  # limit would throttle exactly the load the autoscaler must react to.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+worker:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 60
+
+dbInit:
+  # Client-only container for the one-shot init Job. ECR Public mirror of the
+  # Docker Hub official image (pull-rate limits), pinned to an exact version.
+  image: public.ecr.aws/docker/library/postgres:17.9-alpine
+
+mountPath: /mnt/secrets-store

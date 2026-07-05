@@ -1,0 +1,38 @@
+# Workload-owned exception to the namespace's zero-trust floor (the
+# network-policies chart deliberately ships only default-deny + DNS; per-app
+# allows live with the workload they describe).
+#
+# toFQDNs names the SERVICE, not an address block: the rule stays correct
+# across failovers and re-IPs, and every allowed flow is attributable by
+# hostname in Hubble. It rides the DNS-proxy visibility the baseline
+# allow-dns policy already gives every pod in the namespace. The Redis
+# pattern is domain-wide because ElastiCache hostnames embed a short region
+# code (apne1) that Helm cannot derive from the region value — the port pin
+# keeps it tight. Documented fallback if FQDN matching proves unreliable at
+# validation: a CIDR allow for the intra subnets.
+#
+# One policy covers all three pod shapes (server, worker, db-init Job) via
+# the part-of label — the worker gaining unused 5432 reach is the accepted
+# cost of one object instead of three.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-go-demo-data-tier
+  namespace: {{ .Values.namespace }}
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: go-demo
+  egress:
+    - toFQDNs:
+        - matchPattern: "*.{{ .Values.awsRegion }}.rds.amazonaws.com"
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    - toFQDNs:
+        - matchPattern: "*.cache.amazonaws.com"
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP

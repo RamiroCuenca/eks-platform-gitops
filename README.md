@@ -39,6 +39,7 @@ The split follows the standard rule of thumb: **AWS-credential-requiring resourc
 │   ├── karpenter/        # NodePool + EC2NodeClass for Karpenter
 │   └── network-policies/ # zero-trust default-deny floor + DNS allow
 └── workloads/            # local Helm charts for sample/demo applications
+    ├── go-demo/          # Go demo service: server + worker, db-init Job, HPA
     └── secrets-demo/     # IRSA + ASCP secret-mount demonstration
 ```
 

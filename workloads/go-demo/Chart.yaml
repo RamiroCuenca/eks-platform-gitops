@@ -1,0 +1,6 @@
+apiVersion: v2
+name: go-demo
+description: Go demo service (HTTP server + Redis queue worker) exercising the Aurora and ElastiCache tiers under the cluster's default-deny network policy, with a wave-ordered database-init Job and CPU-based autoscaling.
+type: application
+version: 0.1.0
+appVersion: "1.0"
