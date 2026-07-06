@@ -1,0 +1,120 @@
+# Loki — log aggregation, single-binary mode on a filesystem PV. Sync wave 0
+# alongside the other platform installs (no CRD dependencies in either
+# direction; Alloy, which pushes to it, follows at wave 1).
+#
+# Chart pinned to the mature 6.x line (6.55.0 ships the same Loki 3.6.7 as
+# the days-old 7.0.0 major — a fresh major on a portfolio timeline is risk
+# without payoff; bump deliberately via PR).
+#
+# Storage: filesystem on a 10Gi gp3 PV, NOT S3. S3 would add an IRSA role +
+# bucket + lifecycle rules in the infra repo for a store whose contents are
+# discarded with the cluster — the filesystem PV rides the same EBS CSI path
+# Prometheus already exercises, keeps teardown single-surface, and
+# single-binary-on-filesystem is the upstream-documented shape for exactly
+# this scale. S3 + simple-scalable is the documented growth path.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: loki
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            argocd.argoproj.io/secret-type: cluster
+  template:
+    metadata:
+      name: '{{ .name }}-loki'
+      annotations:
+        argocd.argoproj.io/sync-wave: "0"
+    spec:
+      project: default
+      destination:
+        server: '{{ .server }}'
+        namespace: monitoring
+      sources:
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: loki
+          targetRevision: 6.55.0
+          helm:
+            releaseName: loki
+            valuesObject:
+              deploymentMode: SingleBinary
+              loki:
+                # Single tenant — no multi-tenancy story on this platform,
+                # and auth here is org-scoping, not authentication.
+                auth_enabled: false
+                commonConfig:
+                  replication_factor: 1
+                storage:
+                  type: filesystem
+                schemaConfig:
+                  configs:
+                    - from: "2024-04-01"
+                      store: tsdb
+                      object_store: filesystem
+                      schema: v13
+                      index:
+                        prefix: loki_index_
+                        period: 24h
+                limits_config:
+                  # Same lifecycle-sizing logic as Prometheus retention:
+                  # generous ceiling over any build-screenshot-destroy
+                  # session, enforced by the compactor.
+                  retention_period: 48h
+                compactor:
+                  retention_enabled: true
+                  delete_request_store: filesystem
+              singleBinary:
+                replicas: 1
+                persistence:
+                  enabled: true
+                  storageClass: gp3
+                  size: 10Gi
+                tolerations:
+                  - key: node-tier
+                    operator: Equal
+                    value: system
+                    effect: NoSchedule
+                affinity:
+                  nodeAffinity:
+                    requiredDuringSchedulingIgnoredDuringExecution:
+                      nodeSelectorTerms:
+                        - matchExpressions:
+                            - key: karpenter.sh/nodepool
+                              operator: DoesNotExist
+              # Zero out the simple-scalable topology explicitly — the
+              # upstream-documented companion to SingleBinary mode.
+              read:
+                replicas: 0
+              write:
+                replicas: 0
+              backend:
+                replicas: 0
+              # The chart deploys memcached pairs BY DEFAULT with ~10Gi of
+              # memory requests — a notorious sizing trap for small
+              # clusters. In-process caching is plenty at this scale.
+              chunksCache:
+                enabled: false
+              resultsCache:
+                enabled: false
+              # No gateway: Grafana and Alloy address the `loki` ClusterIP
+              # Service directly; an nginx hop adds nothing cluster-internal.
+              gateway:
+                enabled: false
+              # The canary and helm-test pods exist to validate managed/HA
+              # installs; on a single-binary demo they are noise.
+              lokiCanary:
+                enabled: false
+              test:
+                enabled: false
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true

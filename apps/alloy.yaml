@@ -1,0 +1,125 @@
+# Grafana Alloy — log collection DaemonSet feeding Loki. Sync wave 1: Loki
+# (wave 0) should exist first, though Alloy buffers and retries pushes, so
+# the ordering is tidiness rather than a hard dependency.
+#
+# Why Alloy: Promtail (the historical answer) is EOL upstream as of early
+# 2026 — building new on it would be scheduled rework. Alloy is Grafana's
+# supported collector and this platform's Loki/Grafana pairing keeps the
+# pipeline single-vendor-coherent; Fluent Bit remains the
+# vendor-neutral alternative, at the cost of a second config dialect.
+#
+# Collection model: each DaemonSet member discovers the pods on ITS OWN node
+# (field selector on NODE_NAME, injected via the downward API) and tails
+# them through the Kubernetes API (`loki.source.kubernetes` — the kubelet
+# log endpoint, the same path `kubectl logs` uses). No hostPath mounts, no
+# privileged access to /var/log, no Bottlerocket filesystem-layout coupling;
+# the trade is log traffic through the kubelet, which is fine at demo scale.
+# File-based tailing (hostPath + loki.source.file) is the documented
+# fallback if API tailing ever becomes the bottleneck.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: alloy
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            argocd.argoproj.io/secret-type: cluster
+  template:
+    metadata:
+      name: '{{ .name }}-alloy'
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+    spec:
+      project: default
+      destination:
+        server: '{{ .server }}'
+        namespace: monitoring
+      sources:
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: alloy
+          targetRevision: 1.10.0
+          helm:
+            releaseName: alloy
+            valuesObject:
+              alloy:
+                resources:
+                  requests:
+                    cpu: 50m
+                    memory: 128Mi
+                  limits:
+                    memory: 256Mi
+                configMap:
+                  content: |
+                    // Discover only the pods scheduled on this node — each
+                    // DaemonSet member tails its own node's containers
+                    // instead of every member watching the whole cluster.
+                    // K8S_NODE_NAME is the chart's built-in downward-API
+                    // injection of spec.nodeName.
+                    discovery.kubernetes "pods" {
+                      role = "pod"
+                      selectors {
+                        role  = "pod"
+                        field = "spec.nodeName=" + sys.env("K8S_NODE_NAME")
+                      }
+                    }
+
+                    // Keep the label set small and queryable: namespace,
+                    // pod, container, plus the app labels the platform's
+                    // charts already standardise on. Loki cardinality is
+                    // index cardinality — labels are for filtering, log
+                    // content is for grepping.
+                    discovery.relabel "pod_logs" {
+                      targets = discovery.kubernetes.pods.targets
+
+                      rule {
+                        source_labels = ["__meta_kubernetes_namespace"]
+                        target_label  = "namespace"
+                      }
+                      rule {
+                        source_labels = ["__meta_kubernetes_pod_name"]
+                        target_label  = "pod"
+                      }
+                      rule {
+                        source_labels = ["__meta_kubernetes_pod_container_name"]
+                        target_label  = "container"
+                      }
+                      rule {
+                        source_labels = ["__meta_kubernetes_pod_label_app"]
+                        target_label  = "app"
+                      }
+                      rule {
+                        source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_part_of"]
+                        target_label  = "part_of"
+                      }
+                    }
+
+                    // Tail via the kubelet log API (the `kubectl logs`
+                    // path) — no hostPath mounts, no privileged container.
+                    loki.source.kubernetes "pods" {
+                      targets    = discovery.relabel.pod_logs.output
+                      forward_to = [loki.write.local.receiver]
+                    }
+
+                    loki.write "local" {
+                      endpoint {
+                        url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+                      }
+                    }
+              controller:
+                type: daemonset
+                # Logs from every node, tainted or not — system tier,
+                # Karpenter capacity, and whatever comes later.
+                tolerations:
+                  - operator: Exists
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
