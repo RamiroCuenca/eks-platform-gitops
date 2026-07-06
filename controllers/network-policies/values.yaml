@@ -4,6 +4,11 @@
 # the DNS allow every workload needs to resolve names.
 appNamespaces:
   - demo
+  # The k6 load generator's home: same zero-trust floor as any workload —
+  # a load generator is untrusted workload code like everything else, and
+  # its egress allow (k6 -> go-demo only) ships with the k6 Job manifests
+  # in the app repo.
+  - loadtest
 
 # Create the Namespace objects listed above. The `demo` namespace exists purely
 # to demonstrate default-deny during validation (two pods, traffic dropped
