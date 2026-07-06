@@ -32,4 +32,20 @@ it, scrapes fail *silently* (targets appear, every series is just absent).
 
 ## Scaling
 
-CPU-based HPA on the server (the Deployment omits `spec.replicas` so ArgoCD self-heal and the autoscaler never contend). The worker is fixed at one replica until the autoscaling phase hands it to KEDA's Redis-list scaler.
+Signal-matched per workload; both Deployments omit `spec.replicas` so ArgoCD
+self-heal and the autoscalers never contend for the count.
+
+- **Server** — CPU-based HPA: HTTP load is request-proportional, and
+  utilization computes against requests (no CPU limit, so the load test
+  measures scaling rather than throttling).
+- **Worker** — KEDA `redis-lists` ScaledObject on the `demo:jobs` backlog:
+  an async consumer's CPU stays flat while its queue explodes, so queue
+  depth is the honest signal. `minReplicaCount: 0` — an idle platform runs
+  no worker at all, and the first enqueued job wakes one within a polling
+  interval. KEDA authenticates to ElastiCache (TLS + AUTH) through a
+  `TriggerAuthentication` reading `go-demo-redis-auth`, the platform's one
+  ASCP-mirrored Kubernetes Secret: the scaler polls from outside the pod
+  and cannot read a CSI tmpfs mount. The mirror is scoped to the AUTH token
+  only and exists only while a pod mounts the runtime
+  `SecretProviderClass` — the always-running server keeps it alive when the
+  worker is at zero.

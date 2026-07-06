@@ -1,0 +1,23 @@
+{{- if .Values.keda.enabled }}
+# Credential shim between KEDA and the platform's secret posture: the scaler
+# polls ElastiCache from the keda namespace, so it authenticates with the
+# Redis AUTH token from the one ASCP-mirrored Kubernetes Secret
+# (secretproviderclass-runtime.yaml documents the scoping). Wave 0 with the
+# other identity objects; the referenced Secret materialises when the first
+# server pod mounts the SecretProviderClass, and the scaler self-heals until
+# then.
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: go-demo-redis
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: go-demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  secretTargetRef:
+    - parameter: password
+      name: go-demo-redis-auth
+      key: auth_token
+{{- end }}
