@@ -1,0 +1,20 @@
+# Loki datasource, provisioned through the Grafana sidecar (label
+# grafana_datasource=1) rather than by editing the kube-prometheus-stack
+# values: the datasource belongs to the log pipeline that provides it, and
+# the sidecar route keeps each ApplicationSet self-contained.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datasource-loki
+  labels:
+    grafana_datasource: "1"
+    app.kubernetes.io/part-of: observability
+data:
+  loki-datasource.yaml: |-
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.monitoring.svc.cluster.local:3100
+        isDefault: false
