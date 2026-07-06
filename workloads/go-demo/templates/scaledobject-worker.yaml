@@ -1,0 +1,45 @@
+{{- if .Values.keda.enabled }}
+# Queue-depth scaling for the worker. The honest signal for an async
+# consumer is its backlog, not its CPU: a worker draining a list runs flat
+# while the queue explodes. KEDA polls the Redis list directly and drives an
+# HPA on the Deployment (which omits spec.replicas — the scaler owns the
+# count, same rule as the server's HPA).
+#
+# minReplicaCount 0 is deliberate: scale-from-zero is the capability CPU
+# autoscaling cannot express, so the demo shows it — an idle platform runs
+# no worker at all, and the first enqueued job wakes one within a polling
+# interval.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: go-demo-worker
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: go-demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  scaleTargetRef:
+    name: go-demo-worker
+  minReplicaCount: {{ .Values.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.keda.maxReplicaCount }}
+  # Demo-latency tuning: poll fast enough that scale-out is observable
+  # within a k6 stage, cool down fast enough that scale-to-zero is too.
+  pollingInterval: {{ .Values.keda.pollingInterval }}
+  cooldownPeriod: {{ .Values.keda.cooldownPeriod }}
+  triggers:
+    - type: redis
+      metadata:
+        address: "{{ .Values.redisHost }}:{{ .Values.redisPort }}"
+        # ElastiCache enforces in-transit TLS; the AUTH token arrives via
+        # the TriggerAuthentication, never inline.
+        enableTLS: "true"
+        listName: {{ .Values.keda.listName | quote }}
+        # Target backlog per replica: 300 concurrent k6 VUs against a
+        # 10-deep target forces a visible multi-replica scale-out.
+        listLength: {{ .Values.keda.listLength | quote }}
+        # Any backlog at all wakes the worker from zero.
+        activationListLength: "0"
+      authenticationRef:
+        name: go-demo-redis
+{{- end }}

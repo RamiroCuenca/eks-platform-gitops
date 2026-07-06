@@ -1,5 +1,5 @@
-# Cluster-internal only: validation goes through port-forward and the Phase 11
-# k6 load generator runs in-cluster. No Ingress/LoadBalancer — a public
+# Cluster-internal only: validation goes through port-forward and the k6
+# load generator runs in-cluster. No Ingress/LoadBalancer — a public
 # endpoint on a build-and-destroy demonstration platform is deliberate
 # non-scope (same posture as the ArgoCD UI).
 apiVersion: v1

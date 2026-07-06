@@ -58,6 +58,8 @@ server:
       memory: 256Mi
 
 worker:
+  # Fallback count used only when keda.enabled is false — with KEDA on, the
+  # Deployment omits replicas and the ScaledObject owns the count.
   replicas: 1
   resources:
     requests:
@@ -71,6 +73,17 @@ hpa:
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 60
+
+# Queue-depth scaling for the worker (KEDA redis-lists scaler). The list
+# name mirrors the app's REDIS_QUEUE_KEY default.
+keda:
+  enabled: true
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  pollingInterval: 15
+  cooldownPeriod: 60
+  listName: "demo:jobs"
+  listLength: "10"
 
 dbInit:
   # Client-only container for the one-shot init Job. ECR Public mirror of the
