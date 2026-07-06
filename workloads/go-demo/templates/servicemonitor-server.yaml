@@ -1,0 +1,21 @@
+# Scrape config for the server, targeting the existing ClusterIP Service.
+# Workload-owned, like the chart's network policies: the scrape path is part
+# of the workload's contract, not the platform's. Prometheus adopts it via
+# the nil selectors set in apps/kube-prometheus-stack.yaml.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: go-demo-server
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: go-demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: go-demo
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

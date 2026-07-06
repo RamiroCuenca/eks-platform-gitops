@@ -1,0 +1,23 @@
+# Scrape config for the worker. PodMonitor, not ServiceMonitor: the worker
+# serves no traffic and deliberately has no Service — it exposes :8080 only
+# for /healthz and /metrics. Inventing a Service to satisfy a ServiceMonitor
+# would advertise an endpoint nothing should call; the PodMonitor describes
+# the topology as it is. Its worker_jobs_processed_total is the drain-rate
+# half of the queue-depth story the KEDA scaler acts on.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: go-demo-worker
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: go-demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  selector:
+    matchLabels:
+      app: go-demo-worker
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

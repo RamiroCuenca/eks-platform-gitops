@@ -8,7 +8,7 @@ The [Go demo service](https://github.com/RamiroCuenca/eks-platform-demo-app), on
 |---|---|---|
 | 0 | ServiceAccounts, SecretProviderClasses, network policy, Service | Identities and mounts must exist before anything consumes them |
 | 1 | `db-init` Job (Sync hook, `BeforeHookCreation`) | Provisions the least-privilege DB user as the only identity that can read the master secret; idempotent SQL makes per-sync re-runs harmless |
-| 2 | server + worker Deployments, HPA | Deploy only after the DB user exists — `/readyz` gates traffic on live Aurora + Redis connectivity |
+| 2 | server + worker Deployments, HPA, scrape configs | Deploy only after the DB user exists — `/readyz` gates traffic on live Aurora + Redis connectivity |
 
 ## Secret vs fact — how configuration arrives
 
@@ -19,6 +19,16 @@ The [Go demo service](https://github.com/RamiroCuenca/eks-platform-demo-app), on
 ## Identity split
 
 `go-demo` (server + worker) can read only its own credential and the Redis connection secret. `go-demo-db-init` (the Job) is the only identity able to read the RDS master secret. The app user itself holds `CONNECT` and nothing else — the service performs no relational reads or writes.
+
+## Observability
+
+Scrape configs are workload-owned, like the network policies: a
+`ServiceMonitor` for the server (via its Service) and a `PodMonitor` for the
+worker, which deliberately has no Service — it exposes `:8080` only for
+`/healthz` and `/metrics`. Because the namespace is default-deny in both
+directions, the chart also ships `allow-monitoring-scrape`, admitting
+Prometheus pods from the `monitoring` namespace on the metrics port; without
+it, scrapes fail *silently* (targets appear, every series is just absent).
 
 ## Scaling
 

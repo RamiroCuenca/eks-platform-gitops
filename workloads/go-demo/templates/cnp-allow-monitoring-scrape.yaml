@@ -1,0 +1,30 @@
+# Ingress allow for Prometheus. The demo namespace is default-deny in BOTH
+# directions — without this policy the ServiceMonitor/PodMonitor above
+# "work" (targets appear) but every scrape times out, a silent failure mode:
+# no error in ArgoCD, no alert, just absent series. Scoped to Prometheus
+# pods in the monitoring namespace, on the metrics port only.
+#
+# Same contract as the egress policy: the platform floor stays deny-all and
+# the WORKLOAD declares who may reach it. The db-init Job matches part-of
+# too and gains unused :8080 ingress — the same accepted cost of one policy
+# object instead of three as cnp-allow-data-tier.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-monitoring-scrape
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: go-demo
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: go-demo
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
