@@ -30,16 +30,26 @@ The split follows the standard rule of thumb: **AWS-credential-requiring resourc
 ```
 .
 ├── apps/                 # ArgoCD ApplicationSets, one per controller / workload
+│   ├── alloy.yaml                  # upstream Grafana Alloy chart — log collection
+│   ├── go-demo.yaml                # the demo service (workloads/go-demo)
 │   ├── karpenter.yaml              # upstream Karpenter chart, per cluster
 │   ├── karpenter-resources.yaml    # local NodePool/EC2NodeClass chart, per cluster
+│   ├── keda.yaml                   # upstream KEDA chart — event-driven autoscaling
+│   ├── kube-prometheus-stack.yaml  # upstream metrics stack (Prometheus/Grafana/AM)
+│   ├── loki.yaml                   # upstream Loki chart — log aggregation
 │   ├── network-policies.yaml       # local default-deny CiliumNetworkPolicy chart
+│   ├── observability-config.yaml   # local scrape configs / rules / dashboards chart
 │   ├── secrets-store-csi.yaml      # upstream CSI driver + AWS provider (ASCP)
-│   └── secrets-demo.yaml           # local demo workload that mounts a secret
+│   ├── secrets-demo.yaml           # local demo workload that mounts a secret
+│   └── storage.yaml                # local StorageClass chart (gp3, EBS CSI)
 ├── controllers/          # local Helm charts for platform controllers
 │   ├── karpenter/        # NodePool + EC2NodeClass for Karpenter
-│   └── network-policies/ # zero-trust default-deny floor + DNS allow
+│   ├── network-policies/ # zero-trust default-deny floor + DNS allow
+│   ├── observability/    # ServiceMonitors/PodMonitors, alert rules, dashboards
+│   └── storage/          # explicit gp3 StorageClass (never cluster-default)
 └── workloads/            # local Helm charts for sample/demo applications
-    ├── go-demo/          # Go demo service: server + worker, db-init Job, HPA
+    ├── go-demo/          # Go demo service: server + worker, db-init Job,
+    │                     # HPA (CPU) + KEDA ScaledObject (queue depth)
     └── secrets-demo/     # IRSA + ASCP secret-mount demonstration
 ```
 
@@ -85,7 +95,7 @@ The pattern delivers three properties:
 
 1. **No account-identifying values in Git.** ARNs and account IDs never enter the public repository.
 2. **Multi-cluster by construction.** Adding a second cluster needs no change in this repo; the infrastructure registers a new cluster `Secret` and every `ApplicationSet` emits a new `Application` automatically.
-3. **Reusable for every controller that needs IRSA.** Cilium, AWS LB Controller, External DNS, External Secrets, and the observability stack all consume the same `Secret`.
+3. **Reusable for every controller that needs IRSA.** Cilium, ASCP, the go-demo workload identities and any future controller (AWS LB Controller, External DNS) consume the same `Secret`. Notably, the entire observability and autoscaling stack needed *zero* new bridged values — nothing in it is account-specific.
 
 ## Karpenter delivery
 
@@ -109,6 +119,33 @@ The split prevents the well-known race where `NodePool` resources are applied be
 
 Chart-version bumps, NodePool tuning, and controller value tweaks need no infrastructure change; they flow through this repo and reconcile within the ArgoCD sync interval.
 
+## Observability delivery
+
+The monitoring stack follows the same CRD-then-CR wave split as Karpenter:
+
+| Wave | File | Purpose |
+|---|---|---|
+| 0 | `apps/kube-prometheus-stack.yaml` | Prometheus Operator + Prometheus + Alertmanager + Grafana + exporters; installs the `monitoring.coreos.com` CRDs |
+| 0 | `apps/storage.yaml`, `apps/loki.yaml` | gp3 StorageClass; Loki single-binary on a gp3 PV |
+| 1 | `apps/observability-config.yaml`, `apps/alloy.yaml` | Cilium/Hubble scrape configs, alert rules, dashboards-as-code; log collection |
+| 2 | workload charts | Workload-owned `ServiceMonitor`/`PodMonitor` + the ingress network allow that lets Prometheus through the default-deny floor |
+
+Two deliberate boundaries: Cilium's metric *exporters* are enabled by the
+infra repo (the CNI installs before any CRD exists here), while every scrape
+config lives in this repo; and workloads own their monitors + scrape allows
+exactly like they own their network policies.
+
+## Autoscaling
+
+Signal-matched per workload: the go-demo server scales on CPU (HPA), the
+queue worker scales on Redis list depth (KEDA `redis-lists`, scale-to-zero),
+and Karpenter provisions node capacity underneath both. `apps/keda.yaml`
+installs the controller tier; the ScaledObject/TriggerAuthentication live in
+the go-demo chart.
+
 ## Status
 
-Initial scaffolding (Karpenter). Cilium, secrets/IRSA, RDS/ElastiCache adapters, the observability stack, and demo workloads follow.
+Platform complete for the current scope: Karpenter, Cilium network policy,
+secrets/IRSA (ASCP), the go-demo workload with its data-tier adapters, the
+observability stack (kube-prometheus-stack, Loki/Alloy, dashboards and alerts
+as code) and event-driven autoscaling (KEDA) — all reconciled from this repo.
