@@ -1,0 +1,6 @@
+apiVersion: v2
+name: storage
+description: Cluster StorageClasses backed by the EBS CSI driver for the eks-production-platform.
+type: application
+version: 0.1.0
+appVersion: "1.0"

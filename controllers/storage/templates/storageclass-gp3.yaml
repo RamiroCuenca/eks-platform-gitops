@@ -1,0 +1,23 @@
+# Deliberately NOT annotated as the cluster-default class. Every PVC on this
+# platform names its class explicitly — a workload that silently inherits a
+# default StorageClass is a provisioning dependency nobody declared, and the
+# failure mode (PVC bound to the wrong class, or Pending against a default
+# that a rebuild didn't create) is quieter than an explicit reference error.
+#
+# WaitForFirstConsumer defers volume creation until a pod schedules, so the
+# EBS volume lands in the AZ of the node that will mount it — with Immediate
+# binding a multi-AZ cluster can create the volume in an AZ the pod can never
+# reach.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  # AWS-managed aws/ebs key. The data tier keeps per-module CMKs; demo
+  # metrics and logs do not warrant a key policy + grant path of their own.
+  encrypted: {{ .Values.gp3.encrypted | quote }}
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+reclaimPolicy: {{ .Values.gp3.reclaimPolicy }}

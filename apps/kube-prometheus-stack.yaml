@@ -1,0 +1,206 @@
+# Metrics stack: Prometheus Operator + Prometheus + Alertmanager + Grafana +
+# kube-state-metrics + node-exporter, from the upstream kube-prometheus-stack
+# chart. Sync wave 0 — it installs the monitoring.coreos.com CRDs
+# (ServiceMonitor, PodMonitor, PrometheusRule) that the observability config
+# chart (wave 1) and the go-demo chart (wave 2) create resources against.
+#
+# Nothing account-specific is committed; the cluster generator only targets
+# the cluster. Platform namespaces (monitoring, like kube-system and argocd)
+# sit outside the network-policies zero-trust floor — Prometheus scrapes
+# kubelets, node-exporters and control-plane endpoints cluster-wide, and a
+# default-deny here would need an allowlist that mirrors "everything".
+# Workload namespaces stay default-deny; THEY allow the scraper in
+# (see the go-demo chart's ingress policy).
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            argocd.argoproj.io/secret-type: cluster
+  template:
+    metadata:
+      name: '{{ .name }}-kube-prometheus-stack'
+      annotations:
+        argocd.argoproj.io/sync-wave: "0"
+        # Same class of problem as the secrets-store-csi Application: the
+        # chart ships very large CRDs, and ServerSideApply's local
+        # structured-merge diff chokes on live fields absent from ArgoCD's
+        # cached schema. Delegate the diff to the API server's dry-run
+        # apply. Scoped here, not global, by intent.
+        argocd.argoproj.io/compare-options: ServerSideDiff=true
+    spec:
+      project: default
+      destination:
+        server: '{{ .server }}'
+        namespace: monitoring
+      sources:
+        - repoURL: https://prometheus-community.github.io/helm-charts
+          chart: kube-prometheus-stack
+          # Pinned at chart authoring; bump deliberately via PR on this repo.
+          targetRevision: 87.10.1
+          helm:
+            releaseName: kube-prometheus-stack
+            valuesObject:
+              # ---- components that do not exist on this cluster ----
+              # EKS does not expose etcd, kube-scheduler or
+              # kube-controller-manager for scraping (managed control
+              # plane), and kube-proxy literally does not run — Cilium's
+              # eBPF kube-proxy replacement owns service load-balancing.
+              # Disabling the scrape targets AND their default rule groups
+              # keeps every shipped alert actionable instead of eternally
+              # firing on absent components.
+              kubeEtcd:
+                enabled: false
+              kubeScheduler:
+                enabled: false
+              kubeControllerManager:
+                enabled: false
+              kubeProxy:
+                enabled: false
+              defaultRules:
+                create: true
+                rules:
+                  etcd: false
+                  kubeControllerManager: false
+                  kubeProxy: false
+                  kubeSchedulerAlerting: false
+                  kubeSchedulerRecording: false
+                  windows: false
+              windowsMonitoring:
+                enabled: false
+
+              # ---- operator ----
+              prometheusOperator:
+                tolerations:
+                  - &systemToleration
+                    key: node-tier
+                    operator: Equal
+                    value: system
+                    effect: NoSchedule
+                affinity: &systemAffinity
+                  nodeAffinity:
+                    requiredDuringSchedulingIgnoredDuringExecution:
+                      nodeSelectorTerms:
+                        - matchExpressions:
+                            - key: karpenter.sh/nodepool
+                              operator: DoesNotExist
+                admissionWebhooks:
+                  # The cert patch hook Jobs do NOT inherit the operator's
+                  # tolerations — same lesson as the ArgoCD redisSecretInit
+                  # hook: an untolerated hook pod on a system-only cluster
+                  # hangs the sync forever. No affinity on purpose; the Jobs
+                  # are short-lived and may run anywhere schedulable.
+                  patch:
+                    tolerations:
+                      - *systemToleration
+
+              # ---- Prometheus ----
+              prometheus:
+                prometheusSpec:
+                  # Observability state is pinned to the stable system tier:
+                  # a consolidation-churned Karpenter node taking the TSDB
+                  # (and its AZ-bound EBS volume) with it would blind the
+                  # platform exactly when it is being exercised.
+                  tolerations:
+                    - *systemToleration
+                  affinity: *systemAffinity
+                  # Demo lifecycle sizing: the cluster lives for hours, not
+                  # weeks. retentionSize is the real bound (with headroom
+                  # under the 10Gi PV so the WAL never hits ENOSPC);
+                  # retention time is a generous ceiling over any
+                  # build-screenshot-destroy session.
+                  retention: 2d
+                  retentionSize: 8GB
+                  storageSpec:
+                    volumeClaimTemplate:
+                      spec:
+                        # Explicit class, never the cluster default — the
+                        # storage chart documents why.
+                        storageClassName: gp3
+                        accessModes: [ReadWriteOnce]
+                        resources:
+                          requests:
+                            storage: 10Gi
+                  resources:
+                    requests:
+                      cpu: 250m
+                      memory: 768Mi
+                    limits:
+                      memory: 1536Mi
+                  # By default the chart only selects ServiceMonitors /
+                  # PodMonitors / PrometheusRules carrying its own release
+                  # label — every resource from another chart (the
+                  # observability config chart, go-demo's monitors) would be
+                  # silently ignored. Nil selectors match on nothing but
+                  # namespace, i.e. "everything the RBAC can see", which is
+                  # the correct contract for a platform-wide Prometheus.
+                  serviceMonitorSelectorNilUsesHelmValues: false
+                  podMonitorSelectorNilUsesHelmValues: false
+                  ruleSelectorNilUsesHelmValues: false
+                  probeSelectorNilUsesHelmValues: false
+                  scrapeConfigSelectorNilUsesHelmValues: false
+
+              # ---- Alertmanager ----
+              alertmanager:
+                alertmanagerSpec:
+                  tolerations:
+                    - *systemToleration
+                  affinity: *systemAffinity
+                  # No PV: silences and notification state are acceptable
+                  # losses on a demo platform. The default route keeps the
+                  # null receiver — there is deliberately no external
+                  # notification target (a webhook/Slack secret is a secret
+                  # consumer this platform doesn't need); firing alerts are
+                  # evidenced in the Alertmanager UI itself.
+
+              # ---- Grafana ----
+              grafana:
+                tolerations:
+                  - *systemToleration
+                affinity: *systemAffinity
+                # Grafana is deliberately stateless: dashboards arrive as
+                # sidecar-watched ConfigMaps (observability chart),
+                # datasources are provisioned by this values block, and no
+                # user-created state is worth keeping — so no PV and no
+                # ArgoCD-vs-random-password drift.
+                persistence:
+                  enabled: false
+                grafana.ini:
+                  # The UI is reachable only via kubectl port-forward
+                  # (ClusterIP, no Ingress/LB — same posture as ArgoCD and
+                  # Hubble). Anyone who can reach it already holds
+                  # cluster-level credentials, so an in-app login adds
+                  # friction, not protection. Anonymous gets org Admin and
+                  # the login form is disabled; the production upgrade path
+                  # is an Ingress + SSO, documented with the ArgoCD
+                  # decision.
+                  auth.anonymous:
+                    enabled: true
+                    org_role: Admin
+                  auth:
+                    disable_login_form: true
+
+              # ---- exporters ----
+              kube-state-metrics:
+                tolerations:
+                  - *systemToleration
+                affinity: *systemAffinity
+              prometheus-node-exporter:
+                # Every node, including tainted system nodes and whatever
+                # Karpenter provisions — node metrics are the point.
+                tolerations:
+                  - operator: Exists
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true

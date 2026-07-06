@@ -1,0 +1,9 @@
+# gp3 is the only class shipped: it is cheaper per GiB than gp2 with better
+# baseline IOPS/throughput, and one explicit class is all a build-and-destroy
+# platform needs. Consumers opt in via storageClassName — see the template
+# comment for why no class is marked cluster-default.
+gp3:
+  # Baseline gp3 (3000 IOPS / 125 MiB/s) covers Prometheus TSDB and Loki
+  # chunk workloads at demo scale; provisioned-performance knobs stay off.
+  encrypted: true
+  reclaimPolicy: Delete
