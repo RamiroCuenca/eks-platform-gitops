@@ -1,0 +1,23 @@
+# Dashboards as code: every JSON under dashboards/ becomes a ConfigMap the
+# Grafana sidecar (kube-prometheus-stack default: label grafana_dashboard=1,
+# own-namespace search) loads at runtime. Grafana itself stays stateless —
+# deleting the pod loses nothing that is not in Git.
+#
+# The JSONs are small, hand-written dashboards rather than vendored upstream
+# exports: a 3000-line imported dashboard demonstrates copy-paste, a focused
+# one demonstrates knowing which queries matter. Fleet-level views (nodes,
+# namespaces, workloads) already ship with kube-prometheus-stack's built-in
+# dashboard set and are not duplicated here.
+{{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-{{ base $path | trimSuffix ".json" }}
+  labels:
+    grafana_dashboard: "1"
+    app.kubernetes.io/part-of: observability
+data:
+  {{ base $path }}: |-
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}

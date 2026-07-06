@@ -1,0 +1,13 @@
+# Alert thresholds, surfaced as values so tuning is a reviewable one-line
+# diff instead of an edit inside PromQL. `for:` windows are deliberately
+# short — this platform's lifecycle is a build-screenshot-destroy session,
+# and an alert that needs 15 quiet minutes to fire would never be observed
+# firing at all. A long-lived cluster would stretch these.
+alerts:
+  # Ratio of 5xx responses over all requests, across the demo app.
+  errorRateThreshold: "0.05"
+  # p95 latency ceiling — matches the k6 load-test pass threshold, so the
+  # alert and the load gate agree on what "too slow" means.
+  latencyP95Seconds: "1.5"
+  # Node-level CPU saturation (the worklog floor: CPU > 80%).
+  nodeCpuPercent: "80"

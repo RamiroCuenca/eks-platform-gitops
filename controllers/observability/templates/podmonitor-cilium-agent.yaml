@@ -1,0 +1,20 @@
+# Cilium agent datapath metrics (:9962). PodMonitor rather than
+# ServiceMonitor: the agent is a hostNetwork DaemonSet with a named
+# `prometheus` container port and no Service in front of it — inventing a
+# Service purely to satisfy a ServiceMonitor would misdescribe the topology.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: cilium-agent
+  labels:
+    app.kubernetes.io/part-of: observability
+spec:
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  selector:
+    matchLabels:
+      k8s-app: cilium
+  podMetricsEndpoints:
+    - port: prometheus
+      interval: 15s

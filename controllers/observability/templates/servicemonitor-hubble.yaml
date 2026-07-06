@@ -1,0 +1,23 @@
+# Hubble flow metrics (:9965). The Cilium chart creates a headless
+# `hubble-metrics` Service in kube-system when hubble.metrics is enabled
+# (infra repo, modules/eks/cilium.tf) — this monitor lives HERE, not in the
+# Cilium values, because Cilium installs at cluster bootstrap before the
+# monitoring CRDs exist; a chart-owned ServiceMonitor would fail every
+# from-zero rebuild. Monitors are namespaced into `monitoring` with the rest
+# of the stack and reach kube-system via namespaceSelector.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: hubble
+  labels:
+    app.kubernetes.io/part-of: observability
+spec:
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  selector:
+    matchLabels:
+      k8s-app: hubble
+  endpoints:
+    - port: hubble-metrics
+      interval: 15s
