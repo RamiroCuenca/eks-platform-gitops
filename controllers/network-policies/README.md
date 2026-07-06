@@ -31,13 +31,16 @@ should own. See the infra journal entry "Cilium install boundary".
 
 | Key | Default | Purpose |
 |---|---|---|
-| `appNamespaces` | `[demo]` | Namespaces that receive the baseline. |
+| `appNamespaces` | `[demo, loadtest]` | Namespaces that receive the baseline. |
 | `createNamespaces` | `true` | Create the Namespace objects. Set false where the app's chart already creates them. |
 | `allowIntraNamespace` | `false` | Render the optional intra-namespace allow. |
 
-The `demo` namespace is a validation fixture: it lets the default-deny behaviour
-be proven (two pods, traffic dropped until an allow is added, drops visible in
-Hubble) without waiting for the application to exist.
+The `demo` namespace began as a validation fixture (two pods, traffic dropped
+until an allow is added, drops visible in Hubble) and now hosts the go-demo
+workload. `loadtest` hosts the k6 load-generator Jobs — a load generator is
+untrusted workload code like everything else, so it gets the same floor; its
+egress allow ships with the k6 manifests in the app repo, and the demo-side
+ingress allow lives in the go-demo chart.
 
 ## ci/values.yaml
 

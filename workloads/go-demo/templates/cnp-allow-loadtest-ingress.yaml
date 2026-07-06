@@ -1,0 +1,25 @@
+# Ingress half of the load path — admits k6 pods from the loadtest
+# namespace to the SERVER only, on the container port (the worker takes no
+# HTTP traffic; its load arrives through Redis). The egress half ships with
+# the k6 Job manifests in the app repo: each side of the flow is declared by
+# its own side, same symmetry as the monitoring scrape allow.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-loadtest-ingress
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/part-of: go-demo
+spec:
+  endpointSelector:
+    matchLabels:
+      app: go-demo-server
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: loadtest
+            app: k6
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
