@@ -1,0 +1,46 @@
+# Platform scrape configs, alert rules and Grafana dashboards
+# (controllers/observability). Sync wave 1 — the chart creates
+# monitoring.coreos.com resources, so kube-prometheus-stack (wave 0) must
+# have installed the CRDs first; same CRD-then-CR split as
+# karpenter/karpenter-resources. Nothing account-specific: the cluster
+# generator only targets the cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: observability-config
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            argocd.argoproj.io/secret-type: cluster
+  template:
+    metadata:
+      name: '{{ .name }}-observability-config'
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+    spec:
+      project: default
+      destination:
+        server: '{{ .server }}'
+        # Everything lands next to the stack it configures: the dashboard
+        # ConfigMaps must share Grafana's namespace (the sidecar's default
+        # search scope), and the monitors reach kube-system targets via
+        # their own namespaceSelector.
+        namespace: monitoring
+      source:
+        repoURL: https://github.com/RamiroCuenca/eks-platform-gitops.git
+        targetRevision: main
+        path: controllers/observability
+        helm:
+          releaseName: observability
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true

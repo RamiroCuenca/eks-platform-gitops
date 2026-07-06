@@ -1,0 +1,99 @@
+{
+  "uid": "hubble-network",
+  "title": "Network / Cilium + Hubble",
+  "tags": ["platform", "network"],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Flows by verdict",
+      "description": "FORWARDED vs DROPPED across the cluster — drops here are the zero-trust floor doing its job.",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "cps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (verdict) (rate(hubble_flows_processed_total[1m]))",
+          "legendFormat": "{{verdict}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Drops by reason",
+      "description": "Policy-denied drops are expected for anything the default-deny namespaces have not explicitly allowed.",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "cps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (reason) (rate(hubble_drop_total[1m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "DNS queries (top 10)",
+      "description": "Visible because the allow-dns policy routes lookups through Cilium's L7 DNS proxy — the same visibility the toFQDNs egress policies depend on.",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "cps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(10, sum by (query) (rate(hubble_dns_queries_total[1m])))",
+          "legendFormat": "{{query}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Policy verdicts (agent)",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "cps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (action) (rate(cilium_policy_verdict_total[1m]))",
+          "legendFormat": "{{action}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "TCP flags",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "cps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (flag) (rate(hubble_tcp_flags_total[1m]))",
+          "legendFormat": "{{flag}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Destination port distribution",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "cps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (port) (rate(hubble_port_distribution_total[1m]))",
+          "legendFormat": ":{{port}}"
+        }
+      ]
+    }
+  ]
+}

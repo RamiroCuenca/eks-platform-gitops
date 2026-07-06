@@ -1,0 +1,62 @@
+# Platform alert rules, adopted by Prometheus via the nil rule selector set
+# in apps/kube-prometheus-stack.yaml. These ADD app/demo-focused rules on top
+# of the chart's defaults — CrashLoopBackOff, node pressure, PVC fill and the
+# rest of the fleet baseline already ship in kube-prometheus-stack's
+# defaultRules, so they are not duplicated here. WorkloadPodRestartStorm is
+# the one deliberate overlap: KubePodCrashLooping needs 15 quiet minutes to
+# fire, which a build-screenshot-destroy session never gives it.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: platform-alerts
+  labels:
+    app.kubernetes.io/part-of: observability
+spec:
+  groups:
+    - name: platform.node
+      rules:
+        - alert: NodeCPUUtilizationHigh
+          expr: |
+            100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) > {{ .Values.alerts.nodeCpuPercent }}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node {{`{{ $labels.instance }}`}} CPU above {{ .Values.alerts.nodeCpuPercent }}%"
+            description: "Sustained CPU saturation — expected transiently during load tests while Karpenter provisions capacity; investigate if it persists after scale-out."
+
+    - name: platform.workloads
+      rules:
+        - alert: WorkloadPodRestartStorm
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace=~"demo|loadtest"}[5m]) > 2
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{`{{ $labels.namespace }}`}}/{{`{{ $labels.pod }}`}} restarting repeatedly"
+            description: "More than 2 restarts in 5 minutes — demo-latency companion to the default KubePodCrashLooping (which needs 15m to fire)."
+
+    - name: godemo.slo
+      rules:
+        - alert: GoDemoHighErrorRate
+          expr: |
+            sum(rate(http_requests_total{namespace="demo",status=~"5.."}[5m]))
+              /
+            sum(rate(http_requests_total{namespace="demo"}[5m])) > {{ .Values.alerts.errorRateThreshold }}
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "go-demo 5xx ratio above {{ .Values.alerts.errorRateThreshold }}"
+            description: "Server-side error budget burn across all routes; matches the k6 http_req_failed gate."
+
+        - alert: GoDemoP95LatencyHigh
+          expr: |
+            histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace="demo"}[5m]))) > {{ .Values.alerts.latencyP95Seconds }}
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "go-demo p95 latency above {{ .Values.alerts.latencyP95Seconds }}s"
+            description: "Same ceiling as the k6 load-test threshold, so the alert and the load gate agree on what 'too slow' means."
