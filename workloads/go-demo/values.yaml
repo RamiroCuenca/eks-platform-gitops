@@ -40,7 +40,7 @@ image:
   # The ONLY deployment-defining value committed to Git: the immutable image
   # tag (a full commit SHA in the app repo). Updated exclusively by the app
   # pipeline's promotion pull requests after a successful publish.
-  tag: "ccc41deb5ec3851f265cef3298bd50880e1f10cb"
+  tag: "656f377cf0cd0e3fcc4e93004f599f8ae6e52b04"
 
 serviceAccounts:
   app: go-demo
