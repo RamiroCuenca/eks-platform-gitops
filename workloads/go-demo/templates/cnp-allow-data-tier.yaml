@@ -5,11 +5,16 @@
 # toFQDNs names the SERVICE, not an address block: the rule stays correct
 # across failovers and re-IPs, and every allowed flow is attributable by
 # hostname in Hubble. It rides the DNS-proxy visibility the baseline
-# allow-dns policy already gives every pod in the namespace. The Redis
-# pattern is domain-wide because ElastiCache hostnames embed a short region
-# code (apne1) that Helm cannot derive from the region value — the port pin
-# keeps it tight. Documented fallback if FQDN matching proves unreliable at
-# validation: a CIDR allow for the intra subnets.
+# allow-dns policy already gives every pod in the namespace.
+#
+# matchName over matchPattern, deliberately: Cilium's `*` wildcard matches
+# DNS-name characters but never dots, so a pattern like
+# `*.<region>.rds.amazonaws.com` silently fails to match the multi-label
+# Aurora cluster endpoint (`<cluster>.cluster-<hash>.<region>...`) and the
+# policy drops the very traffic it was written to allow. The exact endpoint
+# hostnames are already bridged from Terraform as values for the pods' env,
+# so the policy pins the same two names — strictly narrower than any
+# wildcard, and the two rules can never drift apart.
 #
 # One policy covers all three pod shapes (server, worker, db-init Job) via
 # the part-of label — the worker gaining unused 5432 reach is the accepted
@@ -25,13 +30,13 @@ spec:
       app.kubernetes.io/part-of: go-demo
   egress:
     - toFQDNs:
-        - matchPattern: "*.{{ .Values.awsRegion }}.rds.amazonaws.com"
+        - matchName: {{ .Values.auroraHost | quote }}
       toPorts:
         - ports:
             - port: "5432"
               protocol: TCP
     - toFQDNs:
-        - matchPattern: "*.cache.amazonaws.com"
+        - matchName: {{ .Values.redisHost | quote }}
       toPorts:
         - ports:
             - port: "6379"
