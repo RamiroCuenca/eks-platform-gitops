@@ -36,7 +36,12 @@ spec:
           securityContext:
             # The image is distroless nonroot (uid 65532) and the binary is
             # static with no filesystem writes — lock both properties in.
+            # The uid must be pinned numerically: the kubelet verifies
+            # runAsNonRoot against the image config's numeric uid only, and
+            # the image's `USER nonroot` is a name it cannot resolve.
             runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:

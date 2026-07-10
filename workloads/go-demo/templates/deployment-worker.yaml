@@ -35,8 +35,11 @@ spec:
         - name: worker
           image: "{{ .Values.imageRepository }}:{{ .Values.image.tag }}"
           securityContext:
-            # Same posture as the server: distroless nonroot, no writes.
+            # Same posture as the server: distroless nonroot, no writes,
+            # uid pinned numerically so runAsNonRoot is verifiable.
             runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
