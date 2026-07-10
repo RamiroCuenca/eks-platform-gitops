@@ -149,3 +149,8 @@ Platform complete for the current scope: Karpenter, Cilium network policy,
 secrets/IRSA (ASCP), the go-demo workload with its data-tier adapters, the
 observability stack (kube-prometheus-stack, Loki/Alloy, dashboards and alerts
 as code) and event-driven autoscaling (KEDA) — all reconciled from this repo.
+
+Runtime evidence of everything this repo delivers — the full ArgoCD tree
+Synced/Healthy, dashboards under live traffic, an alert observed firing, and
+both autoscaling paths exercised under load — is captured in the platform
+repo's [deployment evidence](https://github.com/RamiroCuenca/eks-production-platform/tree/main/docs/screenshots).
